@@ -1,0 +1,64 @@
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+
+platform :ios, '15.1'
+prepare_react_native_project!
+
+target 'IdentifiApp' do
+  inherit! :complete
+  config = use_native_modules!
+
+  use_frameworks! :linkage => :static
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => true,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # Note: React pods are automatically managed by use_react_native!
+  
+  # React Native Vector Icons
+  pod 'RNVectorIcons', :path => '../node_modules/react-native-vector-icons'
+  
+  # IdentiFI framework - only for device builds
+  # This avoids simulator linking errors while allowing device builds
+  pod 'IdentiFi', :path => './IdentiFI.podspec', :platforms => :ios
+
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false
+    )
+    
+    # Fix for empty body warnings and add recursive header search paths
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_WARN_EMPTY_BODY'] = 'NO'
+        config.build_settings['CLANG_WARN_DOCUMENTATION_COMMENTS'] = 'NO'
+        config.build_settings['GCC_WARN_PEDANTIC'] = 'NO'
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'NO'
+        config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'YES'
+        
+        # Add recursive header search paths for Pods
+        header_search_paths = config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
+        header_search_paths << '"$(PODS_ROOT)/Headers"'
+        header_search_paths << '"$(PODS_ROOT)/Headers/Public/**"'
+        header_search_paths << '"$(PODS_ROOT)/Headers/Private/**"'
+        # Add React Native Modules path for RCTEventEmitter.h
+        header_search_paths << '"$(SRCROOT)/../node_modules/react-native/React/Modules"'
+        config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths
+      end
+    end
+    
+    # Add header search paths to the main app target as well
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers"'
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers/Public/**"'  
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers/Private/**"'
+      # Add React Native Modules path for RCTEventEmitter.h
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(SRCROOT)/../node_modules/react-native/React/Modules"'
+    end
+  end
+end
